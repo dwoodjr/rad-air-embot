@@ -1,6 +1,9 @@
 # embot-mvp
 
-MicroPython firmware for an electromagnetic kinetic actuator running on an ESP32-S3. The device alternates between two magnetic phases — switching four electromagnets and sweeping two servo motors in sync — creating a cyclic push-pull motion driven by electromagnetic and mechanical actuation.
+MicroPython firmware for an electromagnetic kinetic "robot room" running on an ESP32-S3.
+The device alternates between two phases creating a cyclic push-pull motion driven by electromagnetic or mechanical actuation.
+1) Switching four electromagnets and ((Primary MVP focus))
+2) Sweeping two servo motors in sync ((Secondary testing focus only))
 
 ## Hardware
 
@@ -8,9 +11,29 @@ MicroPython firmware for an electromagnetic kinetic actuator running on an ESP32
 |---|---|
 | MCU | ESP32-S3-DevKitC-1 (WROOM-2) |
 | Firmware | MicroPython |
+| Electromagnet driver | 4-channel MOSFET driver board — channels A/B/C/D |
+| Electromagnets | 4× coils, one per MOSFET channel |
 | Servo driver | PCA9685 PWM controller (I2C, addr `0x40`, SCL=IO9, SDA=IO8) |
-| Electromagnets | 4× on GPIO 42, 41, 1, 2 |
 | Servos | 2× on PCA9685 channels 0 and 1 |
+
+### Electromagnet circuit
+
+The ESP32 cannot drive coils directly — its GPIO pins only source ~12 mA, far below what an electromagnet needs. The MOSFET board sits between them:
+
+```
+ESP32 GPIO (logic signal) → MOSFET gate → coil current switched to electromagnet
+```
+
+The four ESP32 pins output **logic HIGH/LOW only**. The MOSFET board handles the coil voltage and current on a separate power rail. Each channel maps to one magnet:
+
+| Channel | GPIO | Magnet label |
+|---|---|---|
+| A | IO42 | Magnet A |
+| B | IO41 | Magnet B |
+| C | IO1  | Magnet C |
+| D | IO2  | Magnet D |
+
+> When scaling to more electromagnets, this MOSFET board gets replaced or augmented — see `COLLAB.md` for the expansion path.
 
 ## How it works
 
@@ -32,7 +55,11 @@ embot-mvp/
 │   ├── scan.py               # I2C bus scanner utility (run manually)
 │   ├── wifi_config.py.example
 │   └── settings.toml.example
+├── tools/
+│   ├── embot_sim.py          # Desktop OSC simulator (build TD/Max patches without hardware)
+│   └── requirements.txt
 ├── mps_pinouts.json          # ESP32-S3 pinout reference for MicroPython Workbench
+├── COLLAB.md                 # OSC interface spec and collaborator guide
 ├── .vscode/settings.json     # VS Code / Pylance config (paths need local setup)
 └── .gitignore
 ```

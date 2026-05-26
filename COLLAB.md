@@ -1,6 +1,6 @@
 # embot — Collaborator Guide
 
-This doc is for collaborators building the TouchDesigner control bridge and the Max/MSP soundscape. It covers what the hardware is doing right now, the OSC interface you should design against, and what to keep in mind as the system scales.
+This doc is for help in building the TouchDesigner control bridge and the Max/MSP soundscape. It covers what the hardware is doing right now, the OSC interface you should design against, and what to keep in mind as the system scales.
 
 ---
 
@@ -19,14 +19,20 @@ On power-up the device connects to WiFi and prints its IP address over USB seria
 
 The main loop alternates between two states continuously:
 
-| | Magnets ON | Magnets OFF | Servo 0 | Servo 1 |
-|---|---|---|---|---|
-| **Phase A** | A + C | B + D | 30° | 150° |
-| **Phase B** | B + D | A + C | 150° | 30° |
+| | Magnets ON | Magnets OFF |
+|---|---|---|
+| **Phase A** | A + C | B + D |
+| **Phase B** | B + D | A + C |
 
-Each phase lasts **0.1 seconds**. The servos don't snap — they sweep across 20 interpolated steps to fill the phase window exactly. So the motion is: magnets switch → servos glide to new position → magnets switch → repeat.
+Each phase lasts **0.1 seconds**. The ABCD labeling maps to physical coil positions on the installation. A+C and B+D are opposing pairs — the alternation creates a push-pull magnetic field cycle.
 
-The ABCD labeling maps to physical coil positions on the installation. A+C and B+D are opposing pairs — the alternation creates a push-pull magnetic field cycle.
+### This loop is the seed of the room states
+
+The current A/B alternation is the simplest possible version of a state-driven system — two states, fixed pattern, fixed timing. **The planned room states are an expansion of exactly this structure.** Instead of two hardcoded phases, TD will push one of 8 named states (Idle, Waking, Surprise, Anger, Affection, Aversion, Happiness, Embarrassment), each defining its own magnet pattern, switching tempo, and activation logic.
+
+The OSC command `/embot/state` (see schema below) is where that transition happens — TD sends a state index, the firmware runs the corresponding pattern. Right now the firmware only knows Phase A and Phase B. The room state patterns get programmed in as TD drives them via `/embot/pattern` frame-by-frame, or eventually as named presets baked into the firmware.
+
+See `refs/ROOM_STATES_TRANSLATION.md` for a full breakdown of how each emotional state from the original particle sim maps to electromagnet activation patterns.
 
 ---
 
@@ -44,14 +50,18 @@ The ABCD labeling maps to physical coil positions on the installation. A+C and B
 | Address | Type | Values | Effect |
 |---|---|---|---|
 | `/embot/run` | `i` | `1` / `0` | Start or stop the phase loop |
+| `/embot/state` | `i` | `0`–`7` | Set room state (0=Idle … 7=Pulse) — see translation doc |
 | `/embot/speed` | `f` | seconds (e.g. `0.05`–`2.0`) | Set phase duration |
 | `/embot/phase` | `i` | `0` = A, `1` = B | Force a specific phase (manual override) |
-| `/embot/actuator/0/set` | `f` | `0.0`–`1.0` | Servo 0 position (normalized, maps to 0°–180°) |
-| `/embot/actuator/1/set` | `f` | `0.0`–`1.0` | Servo 1 position (normalized) |
-| `/embot/actuator/2/set` | `i` | `0` / `1` | Magnet A on/off |
-| `/embot/actuator/3/set` | `i` | `0` / `1` | Magnet B on/off |
-| `/embot/actuator/4/set` | `i` | `0` / `1` | Magnet C on/off |
-| `/embot/actuator/5/set` | `i` | `0` / `1` | Magnet D on/off |
+| `/embot/actuator/2/set` | `f` | `0.0`–`1.0` | Magnet A intensity |
+| `/embot/actuator/3/set` | `f` | `0.0`–`1.0` | Magnet B intensity |
+| `/embot/actuator/4/set` | `f` | `0.0`–`1.0` | Magnet C intensity |
+| `/embot/actuator/5/set` | `f` | `0.0`–`1.0` | Magnet D intensity |
+| `/embot/pattern` | `ffff` | four `0.0`–`1.0` values | Set all magnets [A B C D] in one message |
+
+**Magnets use float values (not int 0/1)** because the MOSFET can be driven with PWM — `0.0` = off, `1.0` = full on, values between = variable field strength. Even if the firmware only supports binary right now, using floats in the schema means no breaking changes when PWM is added.
+
+**`/embot/pattern` is the primary message for visual programming.** Pushing all four magnet values in a single packet is far more practical than four individual messages when you're designing patterns frame-by-frame in TD.
 
 **Why index-based addressing?** See the scaling section below — named addresses (`/magnet/a`) break down fast. Design your TD patch using indices from day one.
 
@@ -63,10 +73,12 @@ The ESP32 fires these on each phase transition:
 |---|---|---|---|
 | `/embot/phase/state` | `i` | `0` = A, `1` = B | Every phase transition |
 | `/embot/cycle` | `i` | cumulative count | Every phase transition |
-| `/embot/actuator/0/pos` | `f` | `0.0`–`1.0` | Every phase transition |
-| `/embot/actuator/1/pos` | `f` | `0.0`–`1.0` | Every phase transition |
+| `/embot/actuator/2/state` | `f` | `0.0`–`1.0` | Magnet A current level |
+| `/embot/actuator/3/state` | `f` | `0.0`–`1.0` | Magnet B current level |
+| `/embot/actuator/4/state` | `f` | `0.0`–`1.0` | Magnet C current level |
+| `/embot/actuator/5/state` | `f` | `0.0`–`1.0` | Magnet D current level |
 
-**`/embot/phase/state` is the key signal for Max.** It fires at the magnet switch — a reliable rhythmic pulse. `/embot/cycle` lets you build longer compositional arcs (every 8 cycles, every 32, etc.).
+**`/embot/phase/state` is the key signal for Max.** It fires at the magnet switch — a reliable rhythmic pulse. `/embot/cycle` lets you build longer compositional arcs (every 8 cycles, every 32, etc.). The individual magnet state messages let Max respond to specific coil activations — useful for tying specific sounds to specific physical magnets.
 
 ---
 
@@ -106,16 +118,32 @@ The current setup (4 magnets, 2 servos, 1 device) is the MVP. The installation i
 
 ## Quick reference — current pin/channel map
 
-| Label | Type | Interface | Address |
+| Label | Type | Interface | OSC address |
 |---|---|---|---|
 | Magnet A | Electromagnet (via MOSFET) | GPIO 42 | `/embot/actuator/2/set` |
 | Magnet B | Electromagnet (via MOSFET) | GPIO 41 | `/embot/actuator/3/set` |
 | Magnet C | Electromagnet (via MOSFET) | GPIO 1 | `/embot/actuator/4/set` |
 | Magnet D | Electromagnet (via MOSFET) | GPIO 2 | `/embot/actuator/5/set` |
-| Servo 0 | Servo | PCA9685 ch 0 (I2C 0x40) | `/embot/actuator/0/set` |
-| Servo 1 | Servo | PCA9685 ch 1 (I2C 0x40) | `/embot/actuator/1/set` |
 
-I2C bus: SCL = IO9, SDA = IO8, 400 kHz.
+Or set all four at once: `/embot/pattern  fA fB fC fD`
+
+---
+
+## Simulator — build without hardware
+
+A desktop Python script in `tools/embot_sim.py` mimics the ESP32's OSC output so you can build and test your TD patch and Max patch without physical hardware.
+
+```bash
+cd tools
+pip install -r requirements.txt
+python embot_sim.py                    # localhost, 0.1s phases
+python embot_sim.py --speed 0.5        # slower for easier observation
+python embot_sim.py --host 192.168.x.x # send to another machine on LAN
+```
+
+The sim **broadcasts** `/embot/phase/state`, `/embot/cycle`, and individual magnet states exactly as the real device will. It also **receives** commands from TD (`/embot/run`, `/embot/speed`, `/embot/phase`, `/embot/state`, `/embot/pattern`, `/embot/actuator/N/set`) and logs them to the console — so you can verify your TD→device messages are formed correctly even with no ESP32 connected.
+
+When the real hardware is ready, just point your TD OSC OUT and Max `udpreceive` at the ESP32's IP instead of `127.0.0.1`. Nothing else changes.
 
 ---
 
