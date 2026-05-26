@@ -1,0 +1,7 @@
+{
+  "esp32_s3_wroom2": {
+    "name": "ESP32-S3-DevKitC-1 (WROOM-2)",
+    "left":  ["3V3","3V3","RST","IO4","IO5","IO6","IO7","IO15","IO16","IO17","IO18","IO8","IO3","IO46","IO9","IO10","IO11","IO12","IO13","IO14","5V","GND"],
+    "right": ["GND","IO43/TX","IO44/RX","IO1","IO2","IO42","IO41","IO40","IO39","IO38/RGB","IO37","IO36","IO35","IO0","IO45","IO48","IO47","IO21","IO20","IO19","GND","GND"]
+  }
+}

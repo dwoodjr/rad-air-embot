@@ -1,0 +1,22 @@
+{
+  "files.associations": {
+    "*.mpy": "python",
+    "*.my": "python"
+  },
+  "micropython-ide.deviceCodePath": "device_code",
+  "micropython-ide.targetMCU": "esp32s3",
+  "python.languageServer": "Pylance",
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.extraPaths": [],
+  "python.autoComplete.extraPaths": [],
+  "python.analysis.useLibraryCodeForTypes": true,
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingModuleSource": "none",
+    "reportMissingModuleStubs": "none"
+  },
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.mypy_cache": true
+  },
+  "python.terminal.activateEnvironment": false
+}
